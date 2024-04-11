@@ -17,8 +17,7 @@
 
 void reply_ping(int client_fd) {
   std::string reply = "+PONG\r\n";
-  int err = send(client_fd, reply.c_str(), reply.size(), MSG_NOSIGNAL);
-  close(client_fd);
+  int err = send(client_fd, reply.c_str(), reply.size(), 0);
 }
 
 int main(int argc, char **argv) {
@@ -67,7 +66,7 @@ int main(int argc, char **argv) {
       auto _ = std::async(&reply_ping, client_fd);
     }
   }
-  
+
   close(server_fd);
   return 0;
 }
