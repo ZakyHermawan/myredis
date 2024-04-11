@@ -7,8 +7,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <vector>
 
-#define BUFFER_SIZE 1024
+#define MAX_BUFF_SIZE 1024
 #define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
 
 int main(int argc, char **argv) {
@@ -53,23 +54,14 @@ int main(int argc, char **argv) {
     std::cout << "Client fail to connect\n";
   }
   std::cout << "Client connected\n";
-  char client_buff[BUFFER_SIZE];
+  std::vector<char> client_buff(MAX_BUFF_SIZE);
+  
   while(1) {
-    int read = recv(client_fd, client_buff, BUFFER_SIZE, 0);
-    if (!read) break; // done reading
+    int read = recv(client_fd, &client_buff[0], client_buff.size(), 0);
     if (read < 0) on_error("Client read failed\n");
-    
-    if(strcmp(client_buff, "*1\r\n$4\r\nping\r\n") == 0) {
-      std::string reply = "+PONG\r\n";
-
-      int err = send(client_fd, reply.c_str(), reply.size(), 0);
-      if (err < 0) std::cerr << "Client write failed\n";
-    }
-    else {
-      std::cerr << "unknown command\n";
-      close(server_fd);
-      return 1;
-    }
+    std::string reply = "+PONG\r\n";
+    int err = send(client_fd, reply.c_str(), reply.size(), 0);
+    if (err < 0) std::cerr << "Client write failed\n";
   }
 
   close(server_fd);
