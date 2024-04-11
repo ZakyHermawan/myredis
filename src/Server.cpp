@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     if(strcmp(client_buff, "*1\r\n$4\r\nping\r\n") == 0) {
       std::string reply = "+PONG\r\n";
 
-      int err = send(client_fd, reply.c_str(), pong.size(), 0);
+      int err = send(client_fd, reply.c_str(), reply.size(), 0);
       if (err < 0) std::cerr << "Client write failed\n";
     }
     else {
