@@ -60,9 +60,9 @@ int main(int argc, char **argv) {
     if (read < 0) on_error("Client read failed\n");
     
     if(strcmp(client_buff, "*1\r\n$4\r\nping\r\n") == 0) {
-      char reply[BUFFER_SIZE] = "+PONG\r\n";
+      std::string reply = "+PONG\r\n";
 
-      int err = send(client_fd, reply, read, 0);
+      int err = send(client_fd, reply.c_str(), pong.size(), 0);
       if (err < 0) std::cerr << "Client write failed\n";
     }
     else {
@@ -70,10 +70,8 @@ int main(int argc, char **argv) {
       close(server_fd);
       return 1;
     }
-
   }
 
   close(server_fd);
-
   return 0;
 }
