@@ -8,6 +8,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#define BUFFER_SIZE 1024
+#define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
+
 int main(int argc, char **argv) {
   std::cout << "Logs from your program will appear here!\n";
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -45,9 +48,31 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
   
-  accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+  if(client_fd < 0) {
+    std::cout << "Client fail to connect\n";
+  }
   std::cout << "Client connected\n";
-  
+  char client_buff[BUFFER_SIZE];
+  while(1) {
+    int read = recv(client_fd, client_buff, BUFFER_SIZE, 0);
+    if (!read) break; // done reading
+    if (read < 0) on_error("Client read failed\n");
+    
+    if(strcmp(client_buff, "*1\r\n$4\r\nping\r\n") == 0) {
+      char reply[BUFFER_SIZE] = "+PONG\r\n";
+
+      int err = send(client_fd, reply, read, 0);
+      if (err < 0) std::cerr << "Client write failed\n";
+    }
+    else {
+      std::cerr << "unknown command\n";
+      close(server_fd);
+      return 1;
+    }
+
+  }
+
   close(server_fd);
 
   return 0;
