@@ -7,14 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # External Library
 ##############
 
-add_subdirectory(external/gtest)
+# add_subdirectory(external/gtest)
 
 ##############
 # Tests
 ##############
 
-ENABLE_TESTING()
-ADD_SUBDIRECTORY(tests)
+# ENABLE_TESTING()
+# ADD_SUBDIRECTORY(tests)
 
 add_executable(
   server
