@@ -30,7 +30,16 @@
 *.exe
 *.out
 *.app
+unit_tests
 server
+
+# external
+codecrafters-redis-cpp
+googletest-src
+googletest-build
+
+# build directory
+build
 
 # CMake
 CMakeLists.txt.user

@@ -8,9 +8,18 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <vector>
+#include <future>
+
+#include "eventloop.hpp"
 
 #define MAX_BUFF_SIZE 1024
 #define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
+
+void reply_ping(int client_fd) {
+  std::string reply = "+PONG\r\n";
+  int err = send(client_fd, reply.c_str(), reply.size(), MSG_NOSIGNAL);
+  close(client_fd);
+}
 
 int main(int argc, char **argv) {
   std::cout << "Logs from your program will appear here!\n";
@@ -49,21 +58,16 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
   
-  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  if(client_fd < 0) {
-    std::cout << "Client fail to connect\n";
-  }
-  std::cout << "Client connected\n";
   std::vector<char> client_buff(MAX_BUFF_SIZE);
-  
-  while(1) {
-    int read = recv(client_fd, &client_buff[0], client_buff.size(), 0);
-    if (read < 0) on_error("Client read failed\n");
-    std::string reply = "+PONG\r\n";
-    int err = send(client_fd, reply.c_str(), reply.size(), 0);
-    if (err < 0) std::cerr << "Client write failed\n";
-  }
 
+  while(1) {
+    int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+    if(client_fd >= 0) {
+      std::cout << "Client connected\n";
+      auto _ = std::async(&reply_ping, client_fd);
+    }
+  }
+  
   close(server_fd);
   return 0;
 }
