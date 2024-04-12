@@ -9,12 +9,23 @@
 #include <netdb.h>
 #include <vector>
 #include <future>
+#include <memory>
+#include <shared_mutex>
 
+#include "database.hpp"
 #include "eventloop.hpp"
 #include "parser.hpp"
 
 #define MAX_BUFF_SIZE 1024
 #define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
+
+std::shared_ptr<Database> db;
+
+// typedef std::shared_mutex Lock;
+// typedef std::unique_lock< Lock >  WriteLock; // C++ 11
+// typedef std::shared_lock< Lock >  ReadLock;  // C++ 14
+
+std::shared_mutex db_mutex;
 
 void eventHandler(int client_fd) {
   while(true) {
@@ -60,6 +71,23 @@ void eventHandler(int client_fd) {
         }
         else if(arr[0] == "echo") {
           response = "$" + std::to_string(arr[1].length()) + "\r\n" + arr[1] + "\r\n";
+        }
+        else if(arr[0] == "set") {
+          // do set operation
+          std::unique_lock<std::shared_mutex> write_lock(db_mutex);
+          db->set_value(arr[1], arr[2]);
+          response = "+OK\r\n";
+        }
+        else if(arr[0] == "get") {
+          // do get operation
+          std::shared_lock<std::shared_mutex> read_lock(db_mutex);
+          std::string val = db->get_value(arr[1]);
+          if(val == "") {
+            response = "$-1\r\n";
+          }
+          else {
+            response = "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+          }
         }
         send(client_fd, response.c_str(), response.size(), 0);
       }
@@ -111,7 +139,7 @@ int main(int argc, char **argv) {
   std::cout << "Waiting for a client to connect...\n";
   
   std::vector<char> client_buff(MAX_BUFF_SIZE);
-  std::vector<std::thread> threads;
+  db = std::make_shared<Database>();
 
   while(1) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);

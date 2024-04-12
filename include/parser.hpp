@@ -12,7 +12,7 @@ private:
   char m_next_char;
 public:
   Buffer() = default;
-  Buffer(std::string buff);
+  Buffer(std::string& buff);
   Buffer(char* buff);
   ~Buffer() = default;
 

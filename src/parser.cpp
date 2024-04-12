@@ -2,7 +2,7 @@
 #include <cstring>
 #include "parser.hpp"
 
-Buffer::Buffer(std::string buff) {
+Buffer::Buffer(std::string& buff) {
   std::copy(buff.begin(), buff.end(), std::back_inserter(m_buff));
 }
 
