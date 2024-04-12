@@ -20,6 +20,7 @@ add_executable(
   server
   src/Server.cpp
   src/eventloop.cpp
+  src/parser.cpp
 )
 target_include_directories(server PRIVATE include)
 target_link_libraries(server pthread)

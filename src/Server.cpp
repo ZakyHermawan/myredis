@@ -11,19 +11,57 @@
 #include <future>
 
 #include "eventloop.hpp"
+#include "parser.hpp"
 
 #define MAX_BUFF_SIZE 1024
 #define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
 
-void reply_ping(int client_fd) {
+void eventHandler(int client_fd) {
   while(true) {
-    char buffer[MAX_BUFF_SIZE] = "";
-    while (recv(client_fd, buffer, MAX_BUFF_SIZE, 0)) {
-      std::string request(buffer);
-      if (request.find("ping\r\n") != std::string::npos) {
-        std::string response = "+PONG\r\n";
+    char* tmp_buffer = (char*)malloc(sizeof(char) * MAX_BUFF_SIZE);
+    while (recv(client_fd, tmp_buffer, MAX_BUFF_SIZE, 0)) {
+      Buffer buff(tmp_buffer);
+
+      std::string response;
+      char first_byte = buff.getNextChar();
+      if(first_byte == '*') {
+        // arrays
+        size_t num_elements = buff.getNextChar() - '0';        
+        buff.remove_clrf();
+
+        // currently only accept array of bulk strings
+        std::vector<std::string> arr;
+
+        for(size_t i=0; i<num_elements; ++i) {
+          char data_type = buff.getNextChar();
+          if(data_type == '$') {
+            // bulk strings
+
+            size_t num_bytes = buff.getNextChar() - '0';
+            buff.remove_clrf();
+
+            std::string tmp;
+
+            for(size_t j=0; j<num_bytes; ++j) {
+              tmp.push_back(buff.getNextChar());
+            }
+            tmp[num_bytes] = 0;
+            arr.push_back(tmp);
+            
+            buff.remove_clrf();
+          }
+        }
+
+        std::transform(arr[0].begin(), arr[0].end(), arr[0].begin(),
+          [](unsigned char c){ return std::tolower(c); });
+        if(arr[0] == "ping") {
+          // handle ping
+          response = "+PONG\r\n";
+        }
+        else if(arr[0] == "echo") {
+          response = "$" + std::to_string(arr[1].length()) + "\r\n" + arr[1] + "\r\n";
+        }
         send(client_fd, response.c_str(), response.size(), 0);
-        request.erase(request.find("ping\r\n"), 6);
       }
     }
   }
@@ -41,16 +79,14 @@ int main(int argc, char **argv) {
   // Since the tester restarts your program quite often, setting SO_REUSEADDR
   // ensures that we don't run into 'Address already in use' errors
   int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    {
-        std::cout << "Failed to set SO_REUSEADDR option. " << strerror(errno) << "\n";
-        return 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+      std::cout << "Failed to set SO_REUSEADDR option. " << strerror(errno) << "\n";
+      return 1;
     }
 
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0)
-    {
-        std::cout << "Failed to set SO_REUSEPORT option. " << strerror(errno) << "\n";
-        return 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+      std::cout << "Failed to set SO_REUSEPORT option. " << strerror(errno) << "\n";
+      return 1;
     }
   
   struct sockaddr_in server_addr;
@@ -82,7 +118,7 @@ int main(int argc, char **argv) {
     if (client_fd == -1) return 1;
     pid_t pid = fork();
     if(pid == 0) {
-      reply_ping(client_fd);
+      eventHandler(client_fd);
       close(client_fd);
       exit(0);
     }
