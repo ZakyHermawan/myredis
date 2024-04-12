@@ -10,6 +10,7 @@
 #include <vector>
 #include <future>
 #include <memory>
+#include <numeric>
 #include <shared_mutex>
 
 #include "database.hpp"
@@ -43,7 +44,16 @@ void eventHandler(int client_fd) {
           if(data_type == '$') {
             // bulk strings
 
-            size_t num_bytes = buff.getNextChar() - '0';
+            std::vector<char> numchar;
+            char lookahead_char;
+            do {
+              numchar.push_back(buff.getNextChar());
+              lookahead_char = buff.lookNextChar();
+            } while(lookahead_char != '\r');
+            auto base10_digits = [](char a, char b) {
+              return 10 * a + (b - '0');
+            };
+            size_t num_bytes = std::accumulate(numchar.begin(), numchar.end(), 0, base10_digits);
             buff.remove_clrf();
 
             std::string tmp;
@@ -57,13 +67,12 @@ void eventHandler(int client_fd) {
             buff.remove_clrf();
           }
         }
-
         // convert to lower
         std::transform(arr[0].begin(), arr[0].end(), arr[0].begin(),
           [](unsigned char c){ return std::tolower(c); });
         if(arr[0] == "ping") {
-          // handle ping
-          response = "+PONG\r\n";
+        // handle ping
+        response = "+PONG\r\n";
         }
         else if(arr[0] == "echo") {
           response = "$" + std::to_string(arr[1].length()) + "\r\n" + arr[1] + "\r\n";
@@ -160,23 +169,12 @@ int main(int argc, char **argv) {
   int client_addr_len = sizeof(client_addr);
   
   std::cout << "Waiting for a client to connect...\n";
-  
   std::vector<char> client_buff(MAX_BUFF_SIZE);
 
   while(1) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     if (client_fd == -1) return 1;
-    //       std::thread(Redis::serve, client_fd).detach();
     std::thread(eventHandler, client_fd).detach();
-    // pid_t pid = fork();
-    // if(pid == 0) {
-    //   eventHandler(client_fd);
-    //   close(client_fd);
-    //   exit(0);
-    // }
-    // else {
-    //   close(client_fd);
-    // }
   }
 
   close(server_fd);

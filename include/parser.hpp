@@ -17,5 +17,6 @@ public:
   ~Buffer() = default;
 
   char getNextChar();
+  char lookNextChar();
   void remove_clrf();
 };

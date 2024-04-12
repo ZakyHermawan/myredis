@@ -29,6 +29,10 @@ char Buffer::getNextChar() {
   return curr_char;
 }
 
+char Buffer::lookNextChar() {
+  return m_next_char;
+}
+
 void Buffer::remove_clrf() {
   getNextChar();
   getNextChar();

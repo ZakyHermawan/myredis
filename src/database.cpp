@@ -23,7 +23,3 @@ ms_type Database::get_expiry(std::string& key) {
 system_time_point Database::get_timestamp(std::string& key) {
   return m_expiry[key].second;
 }
-
-size_t Database::get_size() {
-  return m_kv.size();
-}
