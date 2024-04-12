@@ -20,11 +20,6 @@
 #define on_error(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); exit(1); }
 
 std::shared_ptr<Database> db;
-
-// typedef std::shared_mutex Lock;
-// typedef std::unique_lock< Lock >  WriteLock; // C++ 11
-// typedef std::shared_lock< Lock >  ReadLock;  // C++ 14
-
 std::shared_mutex db_mutex;
 
 void eventHandler(int client_fd) {
@@ -63,6 +58,7 @@ void eventHandler(int client_fd) {
           }
         }
 
+        // convert to lower
         std::transform(arr[0].begin(), arr[0].end(), arr[0].begin(),
           [](unsigned char c){ return std::tolower(c); });
         if(arr[0] == "ping") {
@@ -75,18 +71,44 @@ void eventHandler(int client_fd) {
         else if(arr[0] == "set") {
           // do set operation
           std::unique_lock<std::shared_mutex> write_lock(db_mutex);
-          db->set_value(arr[1], arr[2]);
+          std::string key = arr[1], value = arr[2];
+
+          db->set_value(key, value);
+          if(num_elements == 5) {
+            // set expiry
+            // ex: redis-cli set foo bar px 100
+            std::transform(arr[3].begin(), arr[3].end(), arr[3].begin(),
+            [](unsigned char c){ return std::tolower(c); });
+
+            if(arr[3] == "px") {
+              auto duration = std::chrono::milliseconds(std::stoi(arr[4]));
+              db->set_expiry(key, duration);
+            }
+          }
           response = "+OK\r\n";
         }
         else if(arr[0] == "get") {
           // do get operation
           std::shared_lock<std::shared_mutex> read_lock(db_mutex);
-          std::string val = db->get_value(arr[1]);
+          std::string key = arr[1];
+          std::string val = db->get_value(key);
+
           if(val == "") {
             response = "$-1\r\n";
           }
           else {
-            response = "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+            std::string key = arr[1];
+            std::chrono::system_clock::time_point insert_timestamp = db->get_timestamp(key);
+            std::chrono::system_clock::time_point current_timestamp = std::chrono::system_clock::now();
+
+            ms_type time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(current_timestamp - insert_timestamp);
+            ms_type expiry = db->get_expiry(key);
+            if(expiry == std::chrono::milliseconds(0) or time_diff < expiry) {
+              response = "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+            }
+            else {
+              response = "$-1\r\n";
+            }
           }
         }
         send(client_fd, response.c_str(), response.size(), 0);
@@ -96,6 +118,7 @@ void eventHandler(int client_fd) {
 }
 
 int main(int argc, char **argv) {
+  db = std::make_shared<Database>();
   int port = 6379;
   std::cout << "Logs from your program will appear here!\n";
   int server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -139,20 +162,21 @@ int main(int argc, char **argv) {
   std::cout << "Waiting for a client to connect...\n";
   
   std::vector<char> client_buff(MAX_BUFF_SIZE);
-  db = std::make_shared<Database>();
 
   while(1) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     if (client_fd == -1) return 1;
-    pid_t pid = fork();
-    if(pid == 0) {
-      eventHandler(client_fd);
-      close(client_fd);
-      exit(0);
-    }
-    else {
-      close(client_fd);
-    }
+    //       std::thread(Redis::serve, client_fd).detach();
+    std::thread(eventHandler, client_fd).detach();
+    // pid_t pid = fork();
+    // if(pid == 0) {
+    //   eventHandler(client_fd);
+    //   close(client_fd);
+    //   exit(0);
+    // }
+    // else {
+    //   close(client_fd);
+    // }
   }
 
   close(server_fd);
