@@ -128,13 +128,22 @@ void eventHandler(int client_fd) {
 
 int main(int argc, char **argv) {
   db = std::make_shared<Database>();
-  int port = 6379;
+
+  int port;
+  if(argc < 2) {
+    port = 6379;
+  }
+  else {
+    sscanf(argv[2], "%d", &port);
+  }
   std::cout << "Logs from your program will appear here!\n";
   int server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_fd < 0) {
     std::cerr << "Failed to create server socket\n";
     return 1;
   }
+
+
   
   // Since the tester restarts your program quite often, setting SO_REUSEADDR
   // ensures that we don't run into 'Address already in use' errors
