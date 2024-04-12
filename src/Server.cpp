@@ -12,6 +12,7 @@
 #include <memory>
 #include <numeric>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include "database.hpp"
 #include "eventloop.hpp"
@@ -22,6 +23,16 @@
 
 std::shared_ptr<Database> db;
 std::shared_mutex db_mutex;
+
+class Context {
+public:
+  std::unordered_map<std::string, std::string> m_info;
+  Context() {
+    m_info["role"] = "master";
+  }
+};
+
+std::shared_ptr<Context> ctx;
 
 void eventHandler(int client_fd) {
   while(true) {
@@ -120,6 +131,9 @@ void eventHandler(int client_fd) {
             }
           }
         }
+        else if(arr[0] == "info") {
+          response = "$11\r\nrole:" + ctx->m_info["role"] + "\r\n";
+        }
         send(client_fd, response.c_str(), response.size(), 0);
       }
     }
@@ -128,13 +142,19 @@ void eventHandler(int client_fd) {
 
 int main(int argc, char **argv) {
   db = std::make_shared<Database>();
+  ctx = std::make_shared<Context>();
 
-  int port;
+
+  int port = 6379;
   if(argc < 2) {
-    port = 6379;
+    
   }
   else {
-    sscanf(argv[2], "%d", &port);
+    for(int i=0; i<argc; ++i) {
+      if(strcmp(argv[i], "--port") == 0) {
+        sscanf(argv[i+1], "%d", &port);
+      }
+    }
   }
   std::cout << "Logs from your program will appear here!\n";
   int server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
