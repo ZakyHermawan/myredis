@@ -33,8 +33,10 @@ public:
 };
 
 std::shared_ptr<Context> ctx;
+std::shared_mutex ctx_mutex;
 
 void eventHandler(int client_fd) {
+  std::cout << ctx->m_info["role"] << std::endl;
   while(true) {
     char* tmp_buffer = (char*)malloc(sizeof(char) * MAX_BUFF_SIZE);
     while (recv(client_fd, tmp_buffer, MAX_BUFF_SIZE, 0)) {
@@ -132,7 +134,9 @@ void eventHandler(int client_fd) {
           }
         }
         else if(arr[0] == "info") {
-          response = "$11\r\nrole:" + ctx->m_info["role"] + "\r\n";
+          std::cout << ctx->m_info["role"] << std::endl;
+          std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
+          response = "$"+ std::to_string(ctx->m_info["role"].length() + 5) + "\r\nrole:" + ctx->m_info["role"] + "\r\n";
         }
         send(client_fd, response.c_str(), response.size(), 0);
       }
@@ -153,6 +157,11 @@ int main(int argc, char **argv) {
     for(int i=0; i<argc; ++i) {
       if(strcmp(argv[i], "--port") == 0) {
         sscanf(argv[i+1], "%d", &port);
+      }
+      else if(strcmp(argv[i], "--replicaof") == 0) {
+        ctx->m_info["role"] = "slave";
+        ctx->m_info["hostname"] = std::string(argv[i+1]);
+        ctx->m_info["host_port"] = std::string(argv[i+2]);
       }
     }
   }
@@ -182,7 +191,7 @@ int main(int argc, char **argv) {
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
-  
+
   if (bind(server_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
     std::cerr << "Failed to bind to port 6379\n";
     return 1;
