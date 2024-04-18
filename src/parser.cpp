@@ -41,3 +41,11 @@ void Buffer::remove_clrf() {
 std::string compose_bulk_string(std::string& payload) {
   return "$" + std::to_string(payload.length()) + "\r\n" + payload + "\r\n";
 }
+
+std::string compose_array(std::vector<std::string> data) {
+  std::string raw_str = "*" + std::to_string(data.size()) + "\r\n";
+  for(auto d: data) {
+    raw_str += "$" + std::to_string(d.length()) + "\r\n" + d + "\r\n";
+  }
+  return raw_str;
+}

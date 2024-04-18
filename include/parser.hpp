@@ -22,3 +22,4 @@ public:
 };
 
 std::string compose_bulk_string(std::string& payload);
+std::string compose_array(std::vector<std::string>);

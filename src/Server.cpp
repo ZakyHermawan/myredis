@@ -169,9 +169,13 @@ void replica_entry_point() {
   send(replicate_fd, ping.c_str(), ping.length(), 0);
   char buff[1000];
   recv(replicate_fd, buff, sizeof(buff), 0);
-  std::string message_1 = "*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n" + std::to_string(6380) +"\r\n";
+  
+  std::vector<std::string> conf1{"REPLCONF", "listening-port", std::to_string(6380)};
+  std::string message_1 = compose_array(conf1);
   send(replicate_fd, message_1.c_str(), message_1.length(), 0);
-  std::string message_2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
+
+  std::vector<std::string> conf2{"REPLCONF", "capa", "psync2"};
+  std::string message_2 = compose_array(conf2);
   send(replicate_fd, message_2.c_str(), message_2.length(), 0);
 }
 
