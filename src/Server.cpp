@@ -166,8 +166,13 @@ void replica_entry_point() {
   }
 
   std::string ping = "*1\r\n$4\r\nping\r\n";
-
   send(replicate_fd, ping.c_str(), ping.length(), 0);
+  char buff[1000];
+  recv(replicate_fd, buff, sizeof(buff), 0);
+  std::string message_1 = "*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n" + std::to_string(6380) +"\r\n";
+  send(replicate_fd, message_1.c_str(), message_1.length(), 0);
+  std::string message_2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
+  send(replicate_fd, message_2.c_str(), message_2.length(), 0);
 }
 
 int main(int argc, char **argv) {
@@ -183,6 +188,7 @@ int main(int argc, char **argv) {
     for(int i=0; i<argc; ++i) {
       if(strcmp(argv[i], "--port") == 0) {
         sscanf(argv[i+1], "%d", &port);
+        ctx->m_info["listen_port"] = std::string(argv[i+1]);
       }
       else if(strcmp(argv[i], "--replicaof") == 0) {
         ctx->m_info["role"] = "slave";
