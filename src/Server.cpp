@@ -147,11 +147,6 @@ void eventHandler(int client_fd) {
   }
 }
 
-void replica_loop(int replicate_fd) {
-  while(1) {
-
-  }
-}
 
 void replica_entry_point() {
   // begin handshake
@@ -173,9 +168,6 @@ void replica_entry_point() {
   std::string ping = "*1\r\n$4\r\nping\r\n";
 
   send(replicate_fd, ping.c_str(), ping.length(), 0);
-  char buff[10000];
-  // recv(replicate_fd, buff, sizeof(buff), 0);
-  // replica_loop(replicate_fd);
 }
 
 int main(int argc, char **argv) {
@@ -199,7 +191,7 @@ int main(int argc, char **argv) {
         if(ctx->m_info["host_name"] == "localhost") {
           ctx->m_info["host_name"] = "127.0.0.1";
         }
-        std::thread(replica_entry_point).join();
+        replica_entry_point();
       }
     }
   }
