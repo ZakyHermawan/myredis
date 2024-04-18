@@ -140,12 +140,42 @@ void eventHandler(int client_fd) {
             payload += "master_repl_offset:" + ctx->m_info["master_repl_offset"] + "\r\n";
           }
           response = compose_bulk_string(payload);
-          std::cout << response << std::endl;
         }
         send(client_fd, response.c_str(), response.size(), 0);
       }
     }
   }
+}
+
+void replica_loop(int replicate_fd) {
+  while(1) {
+
+  }
+}
+
+void replica_entry_point() {
+  // begin handshake
+  int replicate_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+  struct sockaddr_in master_addr;
+  master_addr.sin_family = AF_INET;
+  master_addr.sin_port = htons(std::stoi(ctx->m_info["host_port"]));
+
+  if(inet_pton(AF_INET, ctx->m_info["host_name"].c_str(), &master_addr.sin_addr) <= 0) {
+    std::cerr << "Invalid address or address is not supported\n";
+    return;
+  }
+  if(connect(replicate_fd, (struct sockaddr*)&master_addr, sizeof(master_addr)) < 0) {
+    std::cerr << "Connection failed\n";
+    return;
+  }
+
+  std::string ping = "*1\r\n$4\r\nping\r\n";
+
+  send(replicate_fd, ping.c_str(), ping.length(), 0);
+  char buff[10000];
+  // recv(replicate_fd, buff, sizeof(buff), 0);
+  // replica_loop(replicate_fd);
 }
 
 int main(int argc, char **argv) {
@@ -164,8 +194,12 @@ int main(int argc, char **argv) {
       }
       else if(strcmp(argv[i], "--replicaof") == 0) {
         ctx->m_info["role"] = "slave";
-        ctx->m_info["hostname"] = std::string(argv[i+1]);
+        ctx->m_info["host_name"] = std::string(argv[i+1]);
         ctx->m_info["host_port"] = std::string(argv[i+2]);
+        if(ctx->m_info["host_name"] == "localhost") {
+          ctx->m_info["host_name"] = "127.0.0.1";
+        }
+        std::thread(replica_entry_point).join();
       }
     }
   }
@@ -211,7 +245,6 @@ int main(int argc, char **argv) {
 
   std::cout << "Waiting for a client to connect...\n";
   std::vector<char> client_buff(MAX_BUFF_SIZE);
-
   while(1) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     if (client_fd == -1) return 1;
