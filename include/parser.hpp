@@ -20,3 +20,5 @@ public:
   char lookNextChar();
   void remove_clrf();
 };
+
+std::string compose_bulk_string(std::string& payload);

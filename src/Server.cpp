@@ -36,7 +36,6 @@ std::shared_ptr<Context> ctx;
 std::shared_mutex ctx_mutex;
 
 void eventHandler(int client_fd) {
-  std::cout << ctx->m_info["role"] << std::endl;
   while(true) {
     char* tmp_buffer = (char*)malloc(sizeof(char) * MAX_BUFF_SIZE);
     while (recv(client_fd, tmp_buffer, MAX_BUFF_SIZE, 0)) {
@@ -88,7 +87,7 @@ void eventHandler(int client_fd) {
         response = "+PONG\r\n";
         }
         else if(arr[0] == "echo") {
-          response = "$" + std::to_string(arr[1].length()) + "\r\n" + arr[1] + "\r\n";
+          response = compose_bulk_string(arr[1]);
         }
         else if(arr[0] == "set") {
           // do set operation
@@ -126,7 +125,7 @@ void eventHandler(int client_fd) {
             ms_type time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(current_timestamp - insert_timestamp);
             ms_type expiry = db->get_expiry(key);
             if(expiry == std::chrono::milliseconds(0) or time_diff < expiry) {
-              response = "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n";
+              response = compose_bulk_string(val);
             }
             else {
               response = "$-1\r\n";
@@ -134,9 +133,14 @@ void eventHandler(int client_fd) {
           }
         }
         else if(arr[0] == "info") {
-          std::cout << ctx->m_info["role"] << std::endl;
           std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
-          response = "$"+ std::to_string(ctx->m_info["role"].length() + 5) + "\r\nrole:" + ctx->m_info["role"] + "\r\n";
+          std::string payload = "role:" + ctx->m_info["role"] + "\r\n";
+          if(arr[1] == "replication") {
+            payload += "master_replid:" + ctx->m_info["master_replid"] + "\r\n";
+            payload += "master_repl_offset:" + ctx->m_info["master_repl_offset"] + "\r\n";
+          }
+          response = compose_bulk_string(payload);
+          std::cout << response << std::endl;
         }
         send(client_fd, response.c_str(), response.size(), 0);
       }
@@ -148,12 +152,12 @@ int main(int argc, char **argv) {
   db = std::make_shared<Database>();
   ctx = std::make_shared<Context>();
 
+  ctx->m_info["master_replid"] = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+  ctx->m_info["master_repl_offset"] = "0";
 
   int port = 6379;
-  if(argc < 2) {
-    
-  }
-  else {
+
+  if(argc > 1) {
     for(int i=0; i<argc; ++i) {
       if(strcmp(argv[i], "--port") == 0) {
         sscanf(argv[i+1], "%d", &port);
@@ -165,6 +169,7 @@ int main(int argc, char **argv) {
       }
     }
   }
+
   std::cout << "Logs from your program will appear here!\n";
   int server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (server_fd < 0) {
@@ -172,8 +177,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-
-  
   // Since the tester restarts your program quite often, setting SO_REUSEADDR
   // ensures that we don't run into 'Address already in use' errors
   int opt = 1;
@@ -186,7 +189,7 @@ int main(int argc, char **argv) {
       std::cout << "Failed to set SO_REUSEPORT option. " << strerror(errno) << "\n";
       return 1;
     }
-  
+
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -196,16 +199,16 @@ int main(int argc, char **argv) {
     std::cerr << "Failed to bind to port 6379\n";
     return 1;
   }
-  
+
   int connection_backlog = 5;
   if (listen(server_fd, connection_backlog) != 0) {
     std::cerr << "listen failed\n";
     return 1;
   }
-  
+
   struct sockaddr_in client_addr;
   int client_addr_len = sizeof(client_addr);
-  
+
   std::cout << "Waiting for a client to connect...\n";
   std::vector<char> client_buff(MAX_BUFF_SIZE);
 

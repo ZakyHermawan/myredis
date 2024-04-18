@@ -38,3 +38,6 @@ void Buffer::remove_clrf() {
   getNextChar();
 }
 
+std::string compose_bulk_string(std::string& payload) {
+  return "$" + std::to_string(payload.length()) + "\r\n" + payload + "\r\n";
+}
