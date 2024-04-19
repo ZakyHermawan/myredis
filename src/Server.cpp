@@ -179,7 +179,6 @@ void replica_entry_point() {
   char buff[1000];
   recv(replicate_fd, buff, sizeof(buff), 0);
 
-  // recv(replicate_fd, buff, sizeof(buff), 0);
   std::vector<std::string> conf1{"REPLCONF", "listening-port", std::to_string(6380)};
   std::string message_1 = compose_array(conf1);
   send(replicate_fd, message_1.c_str(), message_1.length(), 0);
