@@ -82,6 +82,8 @@ void eventHandler(int client_fd) {
         // convert to lower
         std::transform(arr[0].begin(), arr[0].end(), arr[0].begin(),
           [](unsigned char c){ return std::tolower(c); });
+          std::cout << arr[0] << std::endl;
+
         if(arr[0] == "ping") {
         // handle ping
         response = "+PONG\r\n";
@@ -141,6 +143,13 @@ void eventHandler(int client_fd) {
           }
           response = compose_bulk_string(payload);
         }
+        else if(arr[0] == "psync") {
+          response = "+FULLRESYNC 1234567890aaaaaaaaaa1234567890bbbbbbbbbb 0\r\n"; // temporary          
+        }
+        else if(arr[0] == "replconf") {
+          response = "+OK\r\n";
+        }
+        std::cout << response;
         send(client_fd, response.c_str(), response.size(), 0);
       }
     }
@@ -169,14 +178,24 @@ void replica_entry_point() {
   send(replicate_fd, ping.c_str(), ping.length(), 0);
   char buff[1000];
   recv(replicate_fd, buff, sizeof(buff), 0);
-  
+
+  // recv(replicate_fd, buff, sizeof(buff), 0);
   std::vector<std::string> conf1{"REPLCONF", "listening-port", std::to_string(6380)};
   std::string message_1 = compose_array(conf1);
   send(replicate_fd, message_1.c_str(), message_1.length(), 0);
+  recv(replicate_fd, buff, sizeof(buff), 0);
+
 
   std::vector<std::string> conf2{"REPLCONF", "capa", "psync2"};
   std::string message_2 = compose_array(conf2);
   send(replicate_fd, message_2.c_str(), message_2.length(), 0);
+  recv(replicate_fd, buff, sizeof(buff), 0);
+
+  std::vector<std::string> psync{"PSYNC", "?", "-1"};
+  std::string message_3 = compose_array(psync);
+
+  send(replicate_fd, message_3.c_str(), message_3.length(), 0);
+  recv(replicate_fd, buff, sizeof(buff), 0);
 }
 
 int main(int argc, char **argv) {
