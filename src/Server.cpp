@@ -144,9 +144,18 @@ void eventHandler(int client_fd) {
           response = compose_bulk_string(payload);
         }
         else if(arr[0] == "psync") {
-          response = "+FULLRESYNC 1234567890aaaaaaaaaa1234567890bbbbbbbbbb 0\r\n"; // temporary          
+          response = "+FULLRESYNC 1234567890aaaaaaaaaa1234567890bbbbbbbbbb 0\r\n";
+          send(client_fd, response.c_str(), response.size(), 0);
+          std::cout << response << std::endl;
+          
+          std::string empty_rdb = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
+          std::string binary_form = convert_to_binary(empty_rdb);
+          response = "$" + std::to_string(binary_form.length()) + "\r\n" + binary_form;
         }
         else if(arr[0] == "replconf") {
+          response = "+OK\r\n";
+        }
+        else {
           response = "+OK\r\n";
         }
         std::cout << response;

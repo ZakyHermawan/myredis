@@ -49,3 +49,24 @@ std::string compose_array(std::vector<std::string> data) {
   }
   return raw_str;
 }
+
+std::string convert_to_binary(std::string hex) {
+  std::unordered_map<char, char> hex_binary_map{
+      {'0', 0},  {'1', 1},  {'2', 2},  {'3', 3},  {'4', 4},  {'5', 5},
+      {'6', 6},  {'7', 7},  {'8', 8},  {'9', 9},  {'a', 10}, {'b', 11},
+      {'c', 12}, {'d', 13}, {'e', 14}, {'f', 15},
+  };
+  std::cout << "Using size: " << hex.size() / 2 << std::endl;
+  std::string buf;
+  buf.resize(hex.size()/2);
+  
+  for (int i = 0; i < hex.size(); i += 2) {
+    int idx = i / 2;
+    char byte = hex_binary_map[hex[i]];
+    byte = byte << 4;
+    byte += hex_binary_map[hex[i + 1]];
+    buf[idx] = byte;
+  }
+  return buf;
+
+}

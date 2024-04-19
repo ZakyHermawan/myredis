@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 class Buffer {
@@ -23,3 +24,4 @@ public:
 
 std::string compose_bulk_string(std::string& payload);
 std::string compose_array(std::vector<std::string>);
+std::string convert_to_binary(std::string hex);
