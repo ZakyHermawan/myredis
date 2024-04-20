@@ -29,6 +29,7 @@ public:
   std::unordered_map<std::string, std::string> m_info;
   std::vector<std::string> m_listening_ports;
   std::vector<int> m_replica_fds;
+  std::atomic<int> m_repl_offset;
   Context() {
     m_info["role"] = "master";
   }
@@ -116,6 +117,7 @@ void eventHandler(int client_fd) {
             }
           }
 
+          std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
           for(const auto& repl_fd: ctx->m_replica_fds) {
             std::string propagate_cmd = compose_array(arr);
             send(repl_fd, propagate_cmd.c_str(), propagate_cmd.length(), 0);
@@ -148,6 +150,7 @@ void eventHandler(int client_fd) {
         }
         else if(arr[0] == "info") {
           std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
+
           std::string payload = "role:" + ctx->m_info["role"] + "\r\n";
           if(arr.size() >= 2 and arr[1] == "replication") {
             payload += "master_replid:" + ctx->m_info["master_replid"] + "\r\n";
@@ -156,17 +159,24 @@ void eventHandler(int client_fd) {
           response = compose_bulk_string(payload);
         }
         else if(arr[0] == "psync") {
-          response = "+FULLRESYNC 1234567890aaaaaaaaaa1234567890bbbbbbbbbb 0\r\n";
+          std::string repl_id = std::to_string(rand() % 1000000007);
+          std::cout << repl_id << " " << ctx->m_repl_offset << std::endl;
+          std::vector<std::string> payload{ "+FULLRESYNC" + repl_id + std::to_string(ctx->m_repl_offset) };
+          ++ctx->m_repl_offset;
+          response = "+FULLRESYNC " + repl_id + " 0\r\n";
+
           send(client_fd, response.c_str(), response.size(), 0);
 
           std::string empty_rdb = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
           std::string binary_form = convert_to_binary(empty_rdb);
 
+          std::unique_lock<std::shared_mutex> write_lock(ctx_mutex);
           ctx->m_replica_fds.push_back(client_fd);
           response = "$" + std::to_string(binary_form.length()) + "\r\n" + binary_form;
         }
         else if(arr[0] == "replconf") {
           if(arr[1] == "listening-port") {
+            std::unique_lock<std::shared_mutex> write_lock(ctx_mutex);
             ctx->m_listening_ports.push_back(arr[2]);
           }
           response = "+OK\r\n";
@@ -211,7 +221,9 @@ void replica_entry_point() {
   char buff[100000];
   recv(replicate_fd, buff, sizeof(buff), 0);
 
+  std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
   std::vector<std::string> conf1{"REPLCONF", "listening-port", ctx->m_info["listen_port"]};
+  read_lock.release();
   std::string message_1 = compose_array(conf1);
   send(replicate_fd, message_1.c_str(), message_1.length(), 0);
   recv(replicate_fd, buff, sizeof(buff), 0);
@@ -231,11 +243,12 @@ void replica_entry_point() {
   std::cout << "Replica listening to master..." << std::endl;
   memset(buff, 0, sizeof(buff));
   while(recv(replicate_fd, buff, sizeof(buff), 0)) {
-    std::cout << "Propagated command: " << buff << std::endl;
+    std::cout << "Propagated command:\n" << buff << std::endl;
   }
 }
 
 int main(int argc, char **argv) {
+  srand((unsigned) time(NULL));
   db = std::make_shared<Database>();
   ctx = std::make_shared<Context>();
 
