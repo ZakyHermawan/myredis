@@ -27,6 +27,8 @@ std::shared_mutex db_mutex;
 class Context {
 public:
   std::unordered_map<std::string, std::string> m_info;
+  std::vector<std::string> m_listening_ports;
+  std::vector<int> m_replica_fds;
   Context() {
     m_info["role"] = "master";
   }
@@ -82,7 +84,6 @@ void eventHandler(int client_fd) {
         // convert to lower
         std::transform(arr[0].begin(), arr[0].end(), arr[0].begin(),
           [](unsigned char c){ return std::tolower(c); });
-          std::cout << arr[0] << std::endl;
 
         if(arr[0] == "ping") {
         // handle ping
@@ -93,6 +94,12 @@ void eventHandler(int client_fd) {
         }
         else if(arr[0] == "set") {
           // do set operation
+          if(arr.size() < 3) {
+            response = "$-1\r\n";
+            send(client_fd, response.c_str(), response.size(), 0);
+            continue;
+          }
+
           std::unique_lock<std::shared_mutex> write_lock(db_mutex);
           std::string key = arr[1], value = arr[2];
 
@@ -107,6 +114,11 @@ void eventHandler(int client_fd) {
               auto duration = std::chrono::milliseconds(std::stoi(arr[4]));
               db->set_expiry(key, duration);
             }
+          }
+
+          for(const auto& repl_fd: ctx->m_replica_fds) {
+            std::string propagate_cmd = compose_array(arr);
+            send(repl_fd, propagate_cmd.c_str(), propagate_cmd.length(), 0);
           }
           response = "+OK\r\n";
         }
@@ -137,7 +149,7 @@ void eventHandler(int client_fd) {
         else if(arr[0] == "info") {
           std::shared_lock<std::shared_mutex> read_lock(ctx_mutex);
           std::string payload = "role:" + ctx->m_info["role"] + "\r\n";
-          if(arr[1] == "replication") {
+          if(arr.size() >= 2 and arr[1] == "replication") {
             payload += "master_replid:" + ctx->m_info["master_replid"] + "\r\n";
             payload += "master_repl_offset:" + ctx->m_info["master_repl_offset"] + "\r\n";
           }
@@ -146,21 +158,28 @@ void eventHandler(int client_fd) {
         else if(arr[0] == "psync") {
           response = "+FULLRESYNC 1234567890aaaaaaaaaa1234567890bbbbbbbbbb 0\r\n";
           send(client_fd, response.c_str(), response.size(), 0);
-          std::cout << response << std::endl;
-          
+
           std::string empty_rdb = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
           std::string binary_form = convert_to_binary(empty_rdb);
+
+          ctx->m_replica_fds.push_back(client_fd);
           response = "$" + std::to_string(binary_form.length()) + "\r\n" + binary_form;
         }
         else if(arr[0] == "replconf") {
+          if(arr[1] == "listening-port") {
+            ctx->m_listening_ports.push_back(arr[2]);
+          }
           response = "+OK\r\n";
         }
         else {
-          response = "+OK\r\n";
+          response = "$-1\r\n";
         }
-        std::cout << response;
         send(client_fd, response.c_str(), response.size(), 0);
       }
+      else {
+        printf("unsupported command %s\n", tmp_buffer);
+      }
+      memset(tmp_buffer, 0, sizeof(tmp_buffer));
     }
   }
 }
@@ -169,6 +188,10 @@ void eventHandler(int client_fd) {
 void replica_entry_point() {
   // begin handshake
   int replicate_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if(replicate_fd < 0) {
+    std::cerr << "Failed to create socket\n";
+    return;
+  }
 
   struct sockaddr_in master_addr;
   master_addr.sin_family = AF_INET;
@@ -185,14 +208,13 @@ void replica_entry_point() {
 
   std::string ping = "*1\r\n$4\r\nping\r\n";
   send(replicate_fd, ping.c_str(), ping.length(), 0);
-  char buff[1000];
+  char buff[100000];
   recv(replicate_fd, buff, sizeof(buff), 0);
 
-  std::vector<std::string> conf1{"REPLCONF", "listening-port", std::to_string(6380)};
+  std::vector<std::string> conf1{"REPLCONF", "listening-port", ctx->m_info["listen_port"]};
   std::string message_1 = compose_array(conf1);
   send(replicate_fd, message_1.c_str(), message_1.length(), 0);
   recv(replicate_fd, buff, sizeof(buff), 0);
-
 
   std::vector<std::string> conf2{"REPLCONF", "capa", "psync2"};
   std::string message_2 = compose_array(conf2);
@@ -203,7 +225,14 @@ void replica_entry_point() {
   std::string message_3 = compose_array(psync);
 
   send(replicate_fd, message_3.c_str(), message_3.length(), 0);
-  recv(replicate_fd, buff, sizeof(buff), 0);
+  recv(replicate_fd, buff, sizeof(buff), 0); // psync response
+  recv(replicate_fd, buff, sizeof(buff), 0); // empty file
+
+  std::cout << "Replica listening to master..." << std::endl;
+  memset(buff, 0, sizeof(buff));
+  while(recv(replicate_fd, buff, sizeof(buff), 0)) {
+    std::cout << "Propagated command: " << buff << std::endl;
+  }
 }
 
 int main(int argc, char **argv) {
@@ -228,9 +257,12 @@ int main(int argc, char **argv) {
         if(ctx->m_info["host_name"] == "localhost") {
           ctx->m_info["host_name"] = "127.0.0.1";
         }
-        replica_entry_point();
       }
     }
+  }
+
+  if(ctx->m_info["role"] == "slave") {
+    std::thread(replica_entry_point).detach();
   }
 
   std::cout << "Logs from your program will appear here!\n";
